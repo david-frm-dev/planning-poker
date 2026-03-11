@@ -1,0 +1,121 @@
+@if (!currentUser) {
+  <button z-button zType="outline" (click)="toggleTheme()" class="absolute top-5 right-5">
+    <z-icon zType="dark-mode" zSize="xl"/>
+  </button>
+
+  <div class="flex items-center justify-center h-screen ">
+    <z-card class="min-w-112.5"
+            zTitle="Raum beitreten"
+            zAction="Zurück"
+            (zActionClick)="logout()">
+      <p class="text-gray-600 mb-6 text-sm">Raum: <span
+        class="font-mono bg-gray-100 ml-1 px-2 py-1 rounded">{{ roomId }}</span></p>
+
+      <label class="block mb-2 text-sm font-medium">Dein Name</label>
+      <input z-input [(ngModel)]="setupName" type="text" class="w-full text-base h-12.5 p-3 rounded-xl mb-4"
+             placeholder="z.B. Thomas">
+
+      <label class="block mb-2 text-sm font-medium">Rolle</label>
+      <z-select class="w-full rounded-xl h-12.5 text-base mb-8" [(ngModel)]="setupRole">
+        <z-select-item zValue="player">Spieler</z-select-item>
+        <z-select-item zValue="viewer">Zuschauer</z-select-item>
+      </z-select>
+
+      <button z-button zType="outline" (click)="joinWithNewUser()" [zDisabled]="!setupName"
+              class="w-full font-bold py-6 px-6 rounded-xl border-3 my-4">
+        Dem Tisch beitreten
+      </button>
+    </z-card>
+  </div>
+}
+
+@if (currentUser && room) {
+  <div class=" border-b pl-10 pr-5 py-5 flex justify-between items-center shadow-xs">
+    <div class="flex items-end gap-4">
+      <h1 class="text-xl md:text-2xl font-black ">{{ room.name }}</h1>
+      <span class="font-mono bg-foreground text-background px-2 py-1 rounded text-sm font-bold md:inline-block">
+        PIN: {{ room.id }}
+      </span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button z-button zType="outline" (click)="toggleTheme()">
+        <z-icon zType="dark-mode" zSize="xl"/>
+      </button>
+      <button z-button (click)="copyLink()">
+        <z-icon zType="copy"/>
+      </button>
+      <button z-button zType="destructive" (click)="logout()">
+        <z-icon zType="log-out"/>
+        Raum verlassen
+      </button>
+    </div>
+  </div>
+
+  <div class="p-4 md:p-8 max-w-7xl mx-auto">
+    <div class="flex flex-col md:flex-row justify-between mb-6 gap-6">
+      @if (room.cardsRevealed && stats) {
+        <div class="flex gap-4 animate-fade-in">
+          <z-card>
+            <div class="text-xs text-input uppercase font-bold tracking-wider mb-1">Durchschnitt</div>
+            <div class="text-2xl">{{ stats.average }}</div>
+          </z-card>
+        </div>
+      } @else {
+        <div></div>
+      }
+
+      @if (currentUser.role === 'player' || currentUser.role === 'viewer') {
+        <button z-button zType="secondary" (click)="revealCards(room.id, !room.cardsRevealed)"
+                class="font-bold py-5 px-3 rounded-xl border-3 my-4">
+          <z-icon [zType]="room.cardsRevealed ? 'loader-circle' : 'eye'"/>
+          {{ room.cardsRevealed ? 'Neue Runde' : 'Karten aufdecken' }}
+        </button>
+      }
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+      @for (user of currentUsers; track user.id) {
+        <z-card [class]="user.id === currentUser?.id ? 'ring-2 ring-ring' : ''">
+          <div class="flex flex-col items-center justify-center text-center w-full h-full pt-2">
+            <div class="font-bold text-lg mb-1">{{ user.name }}</div>
+            <div class="text-xs text-gray-400 uppercase tracking-wider mb-5 font-medium">{{ user.role }}</div>
+
+            @if (user.role === 'player') {
+              <div class="h-28 w-20 rounded-xl border-2 flex items-center justify-center transition-all duration-300"
+                   [ngClass]="{'bg-indigo-200 border-indigo-400': user.vote && !room.cardsRevealed, 'bg-gray-50 border-dashed border-gray-200': !user.vote, 'bg-white shadow-md': room.cardsRevealed && user.vote}">
+                @if (!user.vote) {
+                  <span class="text-gray-300 text-xl">...</span>
+                }
+                @if (user.vote && !room.cardsRevealed) {
+                  <z-icon zType="check" zSize="xl4" class="text-white"/>
+                }
+                @if (user.vote && room.cardsRevealed) {
+                  <span class="text-4xl font-black text-black">{{ user.vote }}</span>
+                }
+              </div>
+            }
+          </div>
+        </z-card>
+      }
+    </div>
+
+    @if (currentUser.role === 'player') {
+      <div
+        class="fixed bottom-0 left-0 w-full  backdrop-blur-md border-t  p-4 md:p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-10">
+        <div class="max-w-4xl mx-auto flex flex-wrap justify-center gap-2 md:gap-3">
+          @for (card of room.deck; track card) {
+            <button (click)="vote(room.id, card)"
+                    [class.ring-4]="currentUser.vote === card"
+                    [class.ring-indigo-500]="currentUser.vote === card"
+                    [class.-translate-y-2]="currentUser.vote === card"
+                    [disabled]="room.cardsRevealed"
+                    class="w-14 h-20 md:w-16 md:h-24 bg-white border-2 border-gray-200 rounded-xl hover:border-indigo-400 hover:-translate-y-1 text-xl md:text-2xl font-black text-gray-700 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-gray-200 cursor-pointer">
+              {{ card }}
+            </button>
+          }
+        </div>
+      </div>
+      <div class="h-32"></div>
+    }
+  </div>
+}
