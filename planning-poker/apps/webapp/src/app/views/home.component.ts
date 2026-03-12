@@ -58,12 +58,10 @@ export class HomeComponent {
 
   async createRoom() {
     if (!this.newRoomName) return;
-    const roomId = this.pokerService.generateRoomId();
-
     const deckArray = POKER_DECKS[this.selectedDeckId];
 
-    await this.pokerService.createRoom(roomId, this.newRoomName, deckArray);
-    this.router.navigate(['/room', roomId]);
+    const roomId = await this.pokerService.createRoom(this.newRoomName, deckArray);
+    await this.router.navigate(['/room', roomId]);
   }
 
   async joinRoom() {

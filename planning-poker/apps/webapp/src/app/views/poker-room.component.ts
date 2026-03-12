@@ -63,7 +63,7 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
 
   joinWithNewUser() {
     this.currentUser = {
-      id: 'user_' + this.pokerService.generateUuid(),
+      id: generateUuid(),
       name: this.setupName,
       role: this.setupRole,
       vote: null
@@ -77,31 +77,13 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
 
     this.pokerService.joinRoom(this.roomId, this.currentUser);
 
-    this.connectionSub = this.pokerService.monitorConnection().subscribe(connected => {
-      if (connected && this.currentUser) {
-        this.pokerService.joinRoom(this.roomId, this.currentUser);
+
+    this.pokerService.getRoomUpdates(this.roomId).subscribe({
+      next: (update) => {
+        this.room = update.room;
+        this.currentUsers = update.users;
+        this.calculateStats();
       }
-    });
-
-    // 1. Raum abonnieren
-    this.roomSub = this.pokerService.getRoom(this.roomId).subscribe(r => {
-      this.room = r;
-    });
-
-    // 2. User abonnieren, Stats ausrechnen und lokalen Status fixen
-    this.usersSub = this.pokerService.getUsersInRoom(this.roomId).subscribe(users => {
-      this.currentUsers = (users || []).filter(u => u && u.name);
-
-      // Sync local state (Für das Abwählen der Footer-Karten)
-      if (this.currentUser) {
-        const dbUser = this.currentUsers.find(u => u.id === this.currentUser!.id);
-        if (dbUser) {
-          this.currentUser.vote = dbUser.vote;
-          this.pokerService.saveSession(this.currentUser);
-        }
-      }
-
-      this.calculateStats();
     });
   }
 
@@ -135,14 +117,13 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
 
   vote(roomId: string, card: string) {
     if (!this.currentUser) return;
-    this.currentUser.vote = this.currentUser.vote === card ? null : card;
 
     this.pokerService.castVote(roomId, this.currentUser);
   }
 
   revealCards(roomId: string, reveal: boolean) {
     if (!reveal) {
-      this.pokerService.resetRound(roomId, this.currentUsers);
+      this.pokerService.resetRound(roomId);
       if (this.currentUser) this.currentUser.vote = null;
     } else {
       this.pokerService.toggleCards(roomId, reveal);
@@ -165,7 +146,18 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
     this.router.navigate(['/']);
   }
 
-  toggleTheme(){
+  toggleTheme() {
     this.darkModeService.toggleTheme();
   }
+}
+
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
