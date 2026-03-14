@@ -15,7 +15,6 @@ import kotlin.uuid.*
 @RequestMapping("/api/rooms")
 @CrossOrigin // Erlaubt Anfragen vom Angular-Dev-Server (Port 4200)
 class PokerController(private val roomService: RoomService) {
-
     data class CreateRoomRequest(val name: String, val deck: List<String>)
     data class VoteRequest(val userId: String, val vote: String?)
     data class ToggleRequest(val revealed: Boolean)
