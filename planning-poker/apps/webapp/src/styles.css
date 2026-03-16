@@ -147,3 +147,22 @@
   border-radius: 5px;
   background: var(--muted);
 }
+
+
+z-layout, z-header, z-content, z-sidebar {
+  display: block;
+  width: 100%;
+}
+
+/* Verhindert das Body-Scrolling */
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+h2 {
+  font-weight: bolder;
+  font-size: large;
+}

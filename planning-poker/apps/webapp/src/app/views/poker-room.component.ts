@@ -1,4 +1,4 @@
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,11 +11,12 @@ import { ZardButtonComponent } from "../shared/components/button";
 import { ZardDarkMode } from "../shared/services";
 import { ZardIconComponent } from "../shared/components/icon";
 import { toast } from "ngx-sonner";
+import { IssueSidebarComponent } from "./issue-sidebar/issue-sidebar.component";
 
 @Component({
   selector: 'app-poker-room',
   standalone: true,
-  imports: [CommonModule, FormsModule, ZardCardComponent, ZardInputDirective, ZardSelectComponent, ZardSelectItemComponent, ZardButtonComponent, ZardIconComponent],
+  imports: [CommonModule, FormsModule, ZardCardComponent, ZardInputDirective, ZardSelectComponent, ZardSelectItemComponent, ZardButtonComponent, ZardIconComponent, IssueSidebarComponent],
   templateUrl: './poker-room.component.html',
   styles: [`
     .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
@@ -40,6 +41,8 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
   private roomSub!: Subscription;
   private usersSub!: Subscription;
   private connectionSub!: Subscription;
+
+  readonly issueCompVC = viewChild(IssueSidebarComponent);
 
   async ngOnInit() {
     this.roomId = this.route.snapshot.paramMap.get('id') || '';
@@ -117,6 +120,8 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
 
   vote(roomId: string, card: string) {
     if (!this.currentUser) return;
+
+    this.currentUser.vote = this.currentUser.vote == card ? null : card;
 
     this.pokerService.castVote(roomId, this.currentUser);
   }

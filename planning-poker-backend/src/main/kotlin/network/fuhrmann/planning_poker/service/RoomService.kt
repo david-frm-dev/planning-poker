@@ -82,6 +82,12 @@ class RoomService {
     }
 
     fun getEventStream(roomId: String): Flux<RoomUpdate> {
-        return roomSinks[roomId]?.asFlux() ?: Flux.error(Exception("Room not found"))
+        val sinkFlux = roomSinks[roomId]?.asFlux() ?: return Flux.error(Exception("Room not found"))
+
+        val currentRoom = rooms[roomId] ?: return Flux.error(Exception("Room not found"))
+        val currentUsers = usersInRooms[roomId]?.values?.toList() ?: emptyList()
+        val currentState = RoomUpdate(currentRoom, currentUsers)
+
+        return sinkFlux.startWith(currentState)
     }
 }

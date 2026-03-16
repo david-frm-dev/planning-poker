@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, NgZone } from '@angular/core';
-import { firstValueFrom, Observable, of } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 
 export interface Room {
   id: string;
@@ -33,7 +33,8 @@ export type DeckType = keyof typeof POKER_DECKS;
 export class PokerService {
   private http = inject(HttpClient);
   private zone = inject(NgZone);
-  private readonly API_URL = '/api/rooms';
+  // In DEVELOPMENT 'http://localhost:8080/api/rooms' in fusion mode 'api/rooms'
+  private readonly API_URL = 'http://localhost:8080/api/rooms';
   private readonly SESSION_KEY = 'poker_session';
 
   async checkRoomExists(roomId: string): Promise<boolean> {
@@ -48,11 +49,24 @@ export class PokerService {
   getRoomUpdates(roomId: string): Observable<RoomUpdate> {
     return new Observable(observer => {
       const eventSource = new EventSource(`${this.API_URL}/${roomId}/updates`);
+
       eventSource.onmessage = (event) => {
-        this.zone.run(() => observer.next(JSON.parse(event.data)));
+        try {
+          const data = JSON.parse(event.data);
+          this.zone.run(() => observer.next(data));
+        } catch (error) {
+          console.warn('Kein gültiges JSON empfangen:', event.data);
+        }
       };
-      eventSource.onerror = (err) => this.zone.run(() => observer.error(err));
-      return () => eventSource.close();
+
+      eventSource.onerror = (err) => {
+        console.warn('SSE Connection dropped. Browser is attempting auto-reconnect...', err);
+      };
+
+      return () => {
+        console.log('Cleaning up SSE connection');
+        eventSource.close();
+      };
     });
   }
 

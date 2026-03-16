@@ -75,3 +75,7 @@ val copyFrontend by tasks.registering(Copy::class) {
 tasks.processResources {
     dependsOn(copyFrontend)
 }
+
+tasks.bootRun {
+    dependsOn(copyFrontend)
+}
