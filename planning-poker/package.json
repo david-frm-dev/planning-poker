@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "build": "nx run webapp:build:production"
+    "build": "nx run webapp:build:production",
+    "dev": "nx run webapp:serve"
   },
   "private": true,
   "dependencies": {
@@ -43,6 +44,7 @@
     "@nx/js": "22.4.1",
     "@nx/web": "22.4.1",
     "@nx/workspace": "22.4.1",
+    "@openapitools/openapi-generator-cli": "^2.30.2",
     "@schematics/angular": "21.1.1",
     "@swc-node/register": "~1.9.1",
     "@swc/core": "~1.5.7",

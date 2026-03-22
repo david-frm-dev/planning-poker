@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.11.0",
+    "generators": {
+      "api-client": {
+        "generatorName": "typescript-angular",
+        "inputSpec": "../planning-poker-backend/src/main/resources/openapi.yaml",
+        "output": "libs/api-client/src/generated",
+        "skipValidateSpec": true,
+        "additionalProperties": {
+          "ngVersion": "17",
+          "withSeparateModelsAndApi": "true",
+          "enumPropertyNaming": "original",
+          "serviceFileSuffix": "Service",
+          "serviceSuffix": "Service"
+        }
+      }
+    }
+  }
+}

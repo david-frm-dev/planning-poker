@@ -1,30 +1,14 @@
 package network.fuhrmann.planning_poker.service
+
+import network.fuhrmann.planning_poker.generated.model.Room
+import network.fuhrmann.planning_poker.generated.model.RoomUpdate
+import network.fuhrmann.planning_poker.generated.model.User
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Sinks
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import org.slf4j.LoggerFactory
-
-// --- Models ---
-data class User(
-    val id: String,
-    val name: String,
-    val role: String, // 'player' | 'viewer'
-    var vote: String? = null
-)
-
-data class Room(
-    val id: String,
-    val name: String,
-    val deck: List<String>,
-    var cardsRevealed: Boolean = false
-)
-
-// Wrapper für SSE-Updates
-data class RoomUpdate(
-    val room: Room,
-    val users: List<User>
-)
 
 @Service
 class RoomService {
@@ -36,7 +20,6 @@ class RoomService {
         private val log = LoggerFactory.getLogger(RoomService::class.java)
     }
 
-    // Hilfsmethode: Sendet den aktuellen Stand an alle im Raum
     private fun broadcast(roomId: String) {
         log.info("Broadcasting update for room $roomId")
         log.info("Current room state: ${rooms[roomId]}, users: ${usersInRooms[roomId]?.values}")
@@ -49,14 +32,16 @@ class RoomService {
 
     fun roomExists(id: String) = rooms.containsKey(id)
 
-    fun createRoom(id: String, name: String, deck: List<String>) {
-        rooms[id] = Room(id, name, deck)
+    fun createRoom(id: String, name: String, deck: List<String>, calculateStats: Boolean) {
+        rooms[id] = Room(UUID.fromString(id), name, deck, false, calculateStats)
         usersInRooms[id] = ConcurrentHashMap()
         roomSinks[id] = Sinks.many().multicast().directBestEffort()
     }
 
     fun joinRoom(roomId: String, user: User) {
-        usersInRooms[roomId]?.put(user.id, user)
+        val existing = usersInRooms[roomId]?.get(user.id.toString())
+        val stored = if (existing != null && user.vote == null) user.copy(vote = existing.vote) else user
+        usersInRooms[roomId]?.put(user.id.toString(), stored)
         broadcast(roomId)
     }
 
@@ -66,22 +51,27 @@ class RoomService {
     }
 
     fun castVote(roomId: String, userId: String, vote: String?) {
-        usersInRooms[roomId]?.get(userId)?.vote = vote
+        val users = usersInRooms[roomId] ?: return
+        val user = users[userId] ?: return
+        users[userId] = user.copy(vote = vote)
         broadcast(roomId)
     }
 
     fun toggleCards(roomId: String, revealed: Boolean) {
-        rooms[roomId]?.cardsRevealed = revealed
+        rooms.compute(roomId) { _, room -> room?.copy(cardsRevealed = revealed) }
         broadcast(roomId)
     }
 
     fun resetRound(roomId: String) {
-        rooms[roomId]?.cardsRevealed = false
-        usersInRooms[roomId]?.values?.forEach { it.vote = null }
+        rooms.compute(roomId) { _, room -> room?.copy(cardsRevealed = false) }
+        usersInRooms[roomId]?.replaceAll { _, user -> user.copy(vote = null) }
         broadcast(roomId)
     }
 
     fun getEventStream(roomId: String): Flux<RoomUpdate> {
-        return roomSinks[roomId]?.asFlux() ?: Flux.error(Exception("Room not found"))
+        val sink = roomSinks[roomId] ?: return Flux.error(Exception("Room not found"))
+        val room = rooms[roomId] ?: return Flux.error(Exception("Room not found"))
+        val currentState = RoomUpdate(room, usersInRooms[roomId]?.values?.toList() ?: emptyList())
+        return Flux.concat(Flux.just(currentState), sink.asFlux())
     }
 }

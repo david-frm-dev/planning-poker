@@ -51,12 +51,6 @@
           "optimization": false,
           "extractLicenses": false,
           "sourceMap": true,
-          "fileReplacements": [
-            {
-              "replace": "apps/webapp/src/environments/environment.ts",
-              "with": "apps/webapp/src/environments/environment.development.ts"
-            }
-          ]
         }
       },
       "defaultConfiguration": "production"
@@ -64,9 +58,6 @@
     "serve": {
       "executor": "@angular-devkit/build-angular:dev-server",
       "configurations": {
-        "production": {
-          "buildTarget": "webapp:build:production"
-        },
         "development": {
           "buildTarget": "webapp:build:development"
         }
@@ -75,6 +66,7 @@
       "continuous": true,
       "options": {
         "host": "0.0.0.0",
+        "proxyConfig": "apps/webapp/proxy.conf.json",
         "allowedHosts": [
           "planning-poker.fuhrmann.network"
         ]
