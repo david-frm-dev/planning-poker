@@ -29,6 +29,15 @@
   </div>
 }
 
+@if (currentUser && !room) {
+  <div class="flex items-center justify-center h-screen">
+    <div class="flex flex-col items-center gap-4 text-gray-500">
+      <z-icon zType="loader-circle" zSize="xl4" class="animate-spin"/>
+      <span class="text-sm">Verbinde mit Raum…</span>
+    </div>
+  </div>
+}
+
 @if (currentUser && room) {
   <div class=" border-b pl-10 pr-5 py-5 flex justify-between items-center shadow-xs">
     <div class="flex items-end gap-4">
@@ -59,6 +68,12 @@
             <div class="text-xs text-input uppercase font-bold tracking-wider mb-1">Durchschnitt</div>
             <div class="text-2xl">{{ stats.average }}</div>
           </z-card>
+          @if (stats.median !== null) {
+            <z-card>
+              <div class="text-xs text-input uppercase font-bold tracking-wider mb-1">Median</div>
+              <div class="text-2xl">{{ stats.median }}</div>
+            </z-card>
+          }
         </div>
       } @else {
         <div></div>

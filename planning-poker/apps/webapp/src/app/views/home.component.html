@@ -17,13 +17,25 @@
              class="w-full px-4 rounded-xl h-12.5 text-base">
 
       <label class="block text-sm font-medium mt-6 mb-4">Kartendeck</label>
-      <z-select class="w-full rounded-xl h-12.5 text-base" [(ngModel)]="selectedDeckId">
-        @for (deck of deckOptions; track deck.label) {
+      <z-select class="w-full rounded-xl h-12.5 text-base" [(ngModel)]="selectedDeckId" (ngModelChange)="onDeckChange()">
+        @for (deck of deckOptions; track deck.value) {
           <z-select-item [zValue]="deck.value">{{ deck.label }}</z-select-item>
         }
       </z-select>
 
-      <button z-button zType="outline" (click)="createRoom()" [zDisabled]="!newRoomName"
+      @if (selectedDeckId === 'custom') {
+        <label class="block text-sm font-medium mt-4 mb-2">Karten (kommagetrennt)</label>
+        <input z-input [(ngModel)]="customDeckInput" type="text"
+               placeholder="z.B. XS, S, M, L, XL"
+               class="w-full px-4 rounded-xl h-12.5 text-base">
+      }
+
+      <label class="flex items-center gap-3 mt-5 cursor-pointer select-none">
+        <input type="checkbox" [(ngModel)]="calculateStats" class="w-4 h-4 accent-indigo-500 cursor-pointer">
+        <span class="text-sm font-medium">Durchschnitt &amp; Median berechnen</span>
+      </label>
+
+      <button z-button zType="outline" (click)="createRoom()" [zDisabled]="isCreateDisabled()"
                 class="w-full font-bold py-6 px-8 rounded-xl border-3 my-4">
         Raum öffnen
       </button>

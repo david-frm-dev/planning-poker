@@ -1,20 +1,8 @@
 import { Injectable, inject, NgZone } from '@angular/core';
-import { Database, ref, set, update, remove, onDisconnect, onValue, get } from '@angular/fire/database';
-import { Observable } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
+import { RoomsService, UsersService, User, Room, RoomUpdate } from '@planning-poker/api-client';
 
-export interface Room {
-  id: string;
-  name: string;
-  deck: string[];
-  cardsRevealed: boolean;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  role: 'player' | 'viewer';
-  vote: string | null;
-}
+export type { Room, User, RoomUpdate };
 
 // Konstante für die verfügbaren Kartendecks
 export const POKER_DECKS = {
@@ -24,113 +12,87 @@ export const POKER_DECKS = {
 
 export type DeckType = keyof typeof POKER_DECKS;
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class PokerService {
-  private db: Database = inject(Database);
+  private roomsService = inject(RoomsService);
+  private usersService = inject(UsersService);
   private zone = inject(NgZone);
+  private readonly SSE_BASE = '/api/rooms';
   private readonly SESSION_KEY = 'poker_session';
 
   async checkRoomExists(roomId: string): Promise<boolean> {
-    const snapshot = await get(ref(this.db, `rooms/${roomId}`));
-    return snapshot.exists();
+    const response = await firstValueFrom(this.roomsService.checkRoomExists(roomId));
+    return response.exists;
   }
 
-  generateRoomId(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+  async createRoom(name: string, deck: string[], calculateStats: boolean): Promise<string> {
+    const response = await firstValueFrom(this.roomsService.createRoom({ name, deck, calculateStats }));
+    return response.roomId;
   }
 
-  generateUuid(): string {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
+  // SSE stream – uses native EventSource since the generated client has no streaming support.
+  // The beforeunload listener closes the connection cleanly before the browser force-kills it,
+  // which prevents the "connection interrupted while page was loading" browser console error.
+  getRoomUpdates(roomId: string): Observable<RoomUpdate> {
+    return new Observable(observer => {
+      const eventSource = new EventSource(`${this.SSE_BASE}/${roomId}/updates`);
 
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
+      const closeOnUnload = () => eventSource.close();
+      window.addEventListener('beforeunload', closeOnUnload, { once: true });
+
+      eventSource.onmessage = (event) => {
+        this.zone.run(() => observer.next(JSON.parse(event.data) as RoomUpdate));
+      };
+      eventSource.onerror = (err) => this.zone.run(() => observer.error(err));
+
+      return () => {
+        window.removeEventListener('beforeunload', closeOnUnload);
+        eventSource.close();
+      };
     });
   }
 
-  // === SESSION MANAGEMENT ===
-  getSession(): User | null {
-    const data = localStorage.getItem(this.SESSION_KEY);
-    return data ? JSON.parse(data) : null;
+  async joinRoom(roomId: string, user: User): Promise<void> {
+    this.saveSession(user);
+    await firstValueFrom(this.usersService.joinRoom(roomId, user));
+  }
+
+  async castVote(roomId: string, user: User): Promise<void> {
+    await firstValueFrom(
+      this.roomsService.castVote(roomId, { userId: user.id, vote: user.vote ?? undefined })
+    );
+    this.saveSession(user);
+  }
+
+  async toggleCards(roomId: string, revealed: boolean): Promise<void> {
+    await firstValueFrom(this.roomsService.toggleCards(roomId, { revealed }));
+  }
+
+  async resetRound(roomId: string): Promise<void> {
+    await firstValueFrom(this.roomsService.resetRound(roomId));
+  }
+
+  async leaveRoom(roomId: string, userId: string): Promise<void> {
+    await firstValueFrom(this.usersService.leaveRoom(roomId, { userId }));
+    this.clearSession();
   }
 
   saveSession(user: User): void {
     localStorage.setItem(this.SESSION_KEY, JSON.stringify(user));
   }
 
+  getSession(): User | null {
+    const data = localStorage.getItem(this.SESSION_KEY);
+    if (!data) return null;
+    try {
+      return JSON.parse(data) as User;
+    } catch (e) {
+      console.error('Failed to parse session', e);
+      return null;
+    }
+  }
+
   clearSession(): void {
     localStorage.removeItem(this.SESSION_KEY);
-  }
-
-  // === RÄUME ===
-  async createRoom(roomId: string, name: string, deck: string[]): Promise<void> {
-    const roomRef = ref(this.db, `rooms/${roomId}`);
-    await set(roomRef, { id: roomId, name, deck, cardsRevealed: false, createdAt: Date.now() });
-  }
-
-  getRoom(roomId: string): Observable<Room> {
-    return new Observable<Room>(observer => {
-      const unsubscribe = onValue(ref(this.db, `rooms/${roomId}`), (snapshot) => {
-        this.zone.run(() => observer.next(snapshot.val() as Room));
-      });
-      return () => unsubscribe();
-    });
-  }
-
-  getUsersInRoom(roomId: string): Observable<User[]> {
-    return new Observable<User[]>(observer => {
-      const unsubscribe = onValue(ref(this.db, `room_users/${roomId}`), (snapshot) => {
-        this.zone.run(() => {
-          const data = snapshot.val();
-          observer.next(data ? Object.values(data) : []);
-        });
-      });
-      return () => unsubscribe();
-    });
-  }
-
-  async toggleCards(roomId: string, revealed: boolean): Promise<void> {
-    await update(ref(this.db, `rooms/${roomId}`), { cardsRevealed: revealed });
-  }
-
-  async resetRound(roomId: string, users: User[]): Promise<void> {
-    const updates: Record<string, any> = {};
-    updates[`rooms/${roomId}/cardsRevealed`] = false;
-
-    users.forEach(u => {
-      updates[`room_users/${roomId}/${u.id}/vote`] = null;
-    });
-
-    await update(ref(this.db), updates);
-  }
-
-  async joinRoom(roomId: string, user: User): Promise<void> {
-    const userRef = ref(this.db, `room_users/${roomId}/${user.id}`);
-    await onDisconnect(userRef).cancel();
-    await onDisconnect(userRef).remove();
-    await set(userRef, user);
-  }
-
-  monitorConnection(): Observable<boolean | null> {
-    return new Observable<boolean | null>(observer => {
-      const unsubscribe = onValue(ref(this.db, '.info/connected'), (snap) => {
-        this.zone.run(() => observer.next(snap.val()));
-      });
-      return () => unsubscribe();
-    });
-  }
-
-  async leaveRoom(roomId: string, userId: string): Promise<void> {
-    const userRef = ref(this.db, `room_users/${roomId}/${userId}`);
-    await remove(userRef);
-  }
-
-  async castVote(roomId: string, user: User): Promise<void> {
-    const userRef = ref(this.db, `room_users/${roomId}/${user.id}`);
-    await set(userRef, user);
   }
 }
