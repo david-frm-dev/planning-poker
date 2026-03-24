@@ -2,7 +2,7 @@ import { Component, inject, OnDestroy, OnInit, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { retry, Subscription, timer } from 'rxjs';
 import { PokerService, Room, User } from "../utils/poker.service";
 import { ZardCardComponent } from "../shared/components/card";
 import { ZardInputDirective } from "../shared/components/input";
@@ -12,6 +12,8 @@ import { ZardDarkMode } from "../shared/services";
 import { ZardIconComponent } from "../shared/components/icon";
 import { toast } from "ngx-sonner";
 import { IssueSidebarComponent } from "./issue-sidebar/issue-sidebar.component";
+
+const SSE_MAX_RETRIES = 5;
 
 @Component({
   selector: 'app-poker-room',
@@ -27,20 +29,18 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
   private pokerService = inject(PokerService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private readonly darkModeService = inject(ZardDarkMode)
+  private readonly darkModeService = inject(ZardDarkMode);
 
   roomId!: string;
   currentUser: User | null = null;
   currentUsers: User[] = [];
   room: Room | null = null;
-  stats: { average: string, mostVoted: string } | null = null;
+  stats: { average: string, median: string | null } | null = null;
 
   setupName = '';
   setupRole: 'player' | 'viewer' = 'player';
 
-  private roomSub!: Subscription;
-  private usersSub!: Subscription;
-  private connectionSub!: Subscription;
+  private connectionSub?: Subscription;
 
   readonly issueCompVC = viewChild(IssueSidebarComponent);
 
@@ -51,100 +51,157 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
       return;
     }
 
+    try {
+      const exists = await this.pokerService.checkRoomExists(this.roomId);
+      if (!exists) {
+        toast('Dieser Raum existiert nicht.');
+        this.router.navigate(['/']);
+        return;
+      }
+    } catch {
+      toast('Fehler beim Laden des Raums.');
+      this.router.navigate(['/']);
+      return;
+    }
+
     const savedSession = this.pokerService.getSession();
     if (savedSession) {
       this.currentUser = savedSession;
-      this.initRoomConnection();
+      await this.initRoomConnection();
     }
   }
 
   ngOnDestroy() {
-    if (this.connectionSub) this.connectionSub.unsubscribe();
-    if (this.roomSub) this.roomSub.unsubscribe();
-    if (this.usersSub) this.usersSub.unsubscribe();
+    this.connectionSub?.unsubscribe();
   }
 
-  joinWithNewUser() {
+  async joinWithNewUser() {
     this.currentUser = {
       id: generateUuid(),
       name: this.setupName,
       role: this.setupRole,
-      vote: null
+      vote: undefined
     };
     this.pokerService.saveSession(this.currentUser);
-    this.initRoomConnection();
+    await this.initRoomConnection();
   }
 
-  private initRoomConnection() {
+  private async initRoomConnection() {
     if (!this.currentUser) return;
 
-    this.pokerService.joinRoom(this.roomId, this.currentUser);
+    try {
+      await this.pokerService.joinRoom(this.roomId, this.currentUser);
+    } catch {
+      toast('Fehler beim Beitreten des Raums.');
+      this.router.navigate(['/']);
+      return;
+    }
 
-
-    this.pokerService.getRoomUpdates(this.roomId).subscribe({
+    this.connectionSub = this.pokerService.getRoomUpdates(this.roomId).pipe(
+      retry({
+        count: SSE_MAX_RETRIES,
+        delay: (_, retryCount) => {
+          toast(`Verbindung unterbrochen – Versuch ${retryCount}/${SSE_MAX_RETRIES}...`);
+          return timer(2000);
+        }
+      })
+    ).subscribe({
       next: (update) => {
         this.room = update.room;
         this.currentUsers = update.users;
+        // Keep currentUser.vote in sync with server truth (survives reload/rejoin)
+        const serverUser = update.users.find(u => u.id === this.currentUser?.id);
+        if (serverUser && this.currentUser) {
+          this.currentUser = { ...this.currentUser, vote: serverUser.vote };
+        }
         this.calculateStats();
+      },
+      error: () => {
+        toast('Verbindung verloren. Zurück zur Startseite...');
+        this.router.navigate(['/']);
       }
     });
   }
 
   calculateStats() {
-    const votes = this.currentUsers.map(u => u.vote).filter(v => v !== null && v !== '');
+    if (!this.room?.calculateStats) {
+      this.stats = null;
+      return;
+    }
+
+    // Only count players who actually voted — exclude non-voters and viewers
+    const votes = this.currentUsers
+      .filter(u => u.role === 'player')
+      .map(u => u.vote)
+      .filter((v): v is string => v !== undefined && v !== null && v !== '');
+
     if (votes.length === 0) {
       this.stats = null;
       return;
     }
 
-    let averageStr = '-';
     const numericVotes = votes
       .map(v => (v === '½' ? 0.5 : Number(v)))
       .filter(v => !isNaN(v));
 
-    if (numericVotes.length > 0) {
-      const sum = numericVotes.reduce((a, b) => a + b, 0);
-      averageStr = (sum / numericVotes.length).toFixed(1).replace('.0', '');
+    if (numericVotes.length === 0) {
+      // All votes are non-numeric (e.g. t-shirt sizes, ?, ☕) — no stats
+      this.stats = null;
+      return;
     }
 
-    const counts = votes.reduce((acc, val) => {
-      acc[val as string] = (acc[val as string] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const sum = numericVotes.reduce((a, b) => a + b, 0);
+    const avg = sum / numericVotes.length;
+    const averageStr = avg.toFixed(1).replace('.0', '');
 
-    const maxCount = Math.max(...Object.values(counts));
-    const mostVoted = Object.keys(counts).filter(k => counts[k] === maxCount).join(', ');
+    const sorted = [...numericVotes].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 !== 0
+      ? sorted[mid]
+      : (sorted[mid - 1] + sorted[mid]) / 2;
+    const medianStr = median.toFixed(1).replace('.0', '');
 
-    this.stats = { average: averageStr, mostVoted: mostVoted };
+    this.stats = {
+      average: averageStr,
+      median: medianStr !== averageStr ? medianStr : null,
+    };
   }
 
-  vote(roomId: string, card: string) {
+  async vote(roomId: string, card: string) {
     if (!this.currentUser) return;
-
-    this.currentUser.vote = this.currentUser.vote == card ? null : card;
-
-    this.pokerService.castVote(roomId, this.currentUser);
+    const previousVote = this.currentUser.vote;
+    this.currentUser.vote = card;
+    try {
+      await this.pokerService.castVote(roomId, this.currentUser);
+    } catch {
+      this.currentUser.vote = previousVote;
+      toast('Fehler beim Abstimmen.');
+    }
   }
 
-  revealCards(roomId: string, reveal: boolean) {
-    if (!reveal) {
-      this.pokerService.resetRound(roomId);
-      if (this.currentUser) this.currentUser.vote = null;
-    } else {
-      this.pokerService.toggleCards(roomId, reveal);
+  async revealCards(roomId: string, reveal: boolean) {
+    try {
+      if (!reveal) {
+        await this.pokerService.resetRound(roomId);
+        if (this.currentUser) this.currentUser.vote = undefined;
+      } else {
+        await this.pokerService.toggleCards(roomId, reveal);
+      }
+    } catch {
+      toast('Fehler beim Ändern des Kartenstatus.');
     }
   }
 
   copyLink() {
     const url = window.location.href;
     navigator.clipboard.writeText(url).then(() => {
-      toast('Der Link wurde in deine Zwischenablage kopiert!')
+      toast('Der Link wurde in deine Zwischenablage kopiert!');
     });
   }
 
   logout() {
     if (this.currentUser) {
-      this.pokerService.leaveRoom(this.roomId, this.currentUser.id);
+      this.pokerService.leaveRoom(this.roomId, this.currentUser.id).catch(() => {});
     }
     this.pokerService.clearSession();
     this.currentUser = null;
@@ -160,7 +217,6 @@ function generateUuid(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);

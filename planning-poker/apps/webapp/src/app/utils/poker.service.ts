@@ -1,25 +1,8 @@
-import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, NgZone } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
+import { RoomsService, UsersService, User, Room, RoomUpdate } from '@planning-poker/api-client';
 
-export interface Room {
-  id: string;
-  name: string;
-  deck: string[];
-  cardsRevealed: boolean;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  role: 'player' | 'viewer';
-  vote: string | null;
-}
-
-export interface RoomUpdate {
-  room: Room;
-  users: User[];
-}
+export type { Room, User, RoomUpdate };
 
 // Konstante für die verfügbaren Kartendecks
 export const POKER_DECKS = {
@@ -31,40 +14,39 @@ export type DeckType = keyof typeof POKER_DECKS;
 
 @Injectable({ providedIn: 'root' })
 export class PokerService {
-  private http = inject(HttpClient);
+  private roomsService = inject(RoomsService);
+  private usersService = inject(UsersService);
   private zone = inject(NgZone);
-  // In DEVELOPMENT 'http://localhost:8080/api/rooms' in fusion mode 'api/rooms'
-  private readonly API_URL = 'http://localhost:8080/api/rooms';
+  private readonly SSE_BASE = '/api/rooms';
   private readonly SESSION_KEY = 'poker_session';
 
   async checkRoomExists(roomId: string): Promise<boolean> {
-    return firstValueFrom(this.http.get<boolean>(`${this.API_URL}/${roomId}/exists`));
+    const response = await firstValueFrom(this.roomsService.checkRoomExists(roomId));
+    return response.exists;
   }
 
-  async createRoom(name: string, deck: string[]): Promise<string> {
-    return await firstValueFrom(this.http.post(this.API_URL, { name, deck }, { responseType: 'text' }));
+  async createRoom(name: string, deck: string[], calculateStats: boolean): Promise<string> {
+    const response = await firstValueFrom(this.roomsService.createRoom({ name, deck, calculateStats }));
+    return response.roomId;
   }
 
-  // Kombinierter Stream für Room + Users via SSE
+  // SSE stream – uses native EventSource since the generated client has no streaming support.
+  // The beforeunload listener closes the connection cleanly before the browser force-kills it,
+  // which prevents the "connection interrupted while page was loading" browser console error.
   getRoomUpdates(roomId: string): Observable<RoomUpdate> {
     return new Observable(observer => {
-      const eventSource = new EventSource(`${this.API_URL}/${roomId}/updates`);
+      const eventSource = new EventSource(`${this.SSE_BASE}/${roomId}/updates`);
+
+      const closeOnUnload = () => eventSource.close();
+      window.addEventListener('beforeunload', closeOnUnload, { once: true });
 
       eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.zone.run(() => observer.next(data));
-        } catch (error) {
-          console.warn('Kein gültiges JSON empfangen:', event.data);
-        }
+        this.zone.run(() => observer.next(JSON.parse(event.data) as RoomUpdate));
       };
-
-      eventSource.onerror = (err) => {
-        console.warn('SSE Connection dropped. Browser is attempting auto-reconnect...', err);
-      };
+      eventSource.onerror = (err) => this.zone.run(() => observer.error(err));
 
       return () => {
-        console.log('Cleaning up SSE connection');
+        window.removeEventListener('beforeunload', closeOnUnload);
         eventSource.close();
       };
     });
@@ -72,23 +54,26 @@ export class PokerService {
 
   async joinRoom(roomId: string, user: User): Promise<void> {
     this.saveSession(user);
-    await firstValueFrom(this.http.post(`${this.API_URL}/${roomId}/join`, user));
+    await firstValueFrom(this.usersService.joinRoom(roomId, user));
   }
 
   async castVote(roomId: string, user: User): Promise<void> {
-    await firstValueFrom(this.http.post(`${this.API_URL}/${roomId}/vote`, { userId: user.id, vote: user.vote }));
+    await firstValueFrom(
+      this.roomsService.castVote(roomId, { userId: user.id, vote: user.vote ?? undefined })
+    );
+    this.saveSession(user);
   }
 
   async toggleCards(roomId: string, revealed: boolean): Promise<void> {
-    await firstValueFrom(this.http.post(`${this.API_URL}/${roomId}/toggle`, { revealed }));
+    await firstValueFrom(this.roomsService.toggleCards(roomId, { revealed }));
   }
 
   async resetRound(roomId: string): Promise<void> {
-    await firstValueFrom(this.http.post(`${this.API_URL}/${roomId}/reset`, {}));
+    await firstValueFrom(this.roomsService.resetRound(roomId));
   }
 
   async leaveRoom(roomId: string, userId: string): Promise<void> {
-    await firstValueFrom(this.http.post(`${this.API_URL}/${roomId}/leave`, { userId }));
+    await firstValueFrom(this.usersService.leaveRoom(roomId, { userId }));
     this.clearSession();
   }
 

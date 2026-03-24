@@ -1,0 +1,554 @@
+openapi: 3.1.0
+info:
+  title: Planning Poker Backend API
+  description: REST API and SSE endpoints for multiplayer planning poker sessions
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: /api
+    description: Default server
+
+tags:
+  - name: Rooms
+    description: Planning poker room operations
+  - name: Users
+    description: User-related operations
+  - name: Events
+    description: Server-Sent Events stream
+
+paths:
+  /rooms/{id}/exists:
+    get:
+      operationId: checkRoomExists
+      tags:
+        - Rooms
+      summary: Check if room exists
+      description: Returns true if a room with the given ID exists, false otherwise
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      responses:
+        "200":
+          description: Room existence check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomExistsResponse"
+  /rooms:
+    post:
+      operationId: createRoom
+      tags:
+        - Rooms
+      summary: Create new room
+      description: Creates a new planning poker room with the given name and deck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoomRequest"
+            example:
+              name: "Sprint Planning #1"
+              deck:
+                - "0"
+                - "1"
+                - "2"
+                - "3"
+                - "5"
+                - "8"
+                - "13"
+                - "21"
+                - "34"
+                - "55"
+                - "fib"
+                - "l"
+                - "m"
+                - "h"
+      responses:
+        "200":
+          description: Room ID of the newly created room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateRoomResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /rooms/{id}/join:
+    post:
+      operationId: joinRoom
+      tags:
+        - Users
+      summary: Join room as user
+      description: Adds a user to the room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+            example:
+              id: "user-uuid-here"
+              name: "John Doe"
+              role: player
+      responses:
+        "200":
+          description: User joined successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /rooms/{id}/vote:
+    post:
+      operationId: castVote
+      tags:
+        - Rooms
+      summary: Cast vote
+      description: Cast a vote for the current round in the room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoteRequest"
+            example:
+              userId: "user-uuid-here"
+              vote: "5"
+      responses:
+        "200":
+          description: Vote cast successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room not found or user not in room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid vote value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /rooms/{id}/toggle:
+    post:
+      operationId: toggleCards
+      tags:
+        - Rooms
+      summary: Toggle cards visibility
+      description: Show or hide the card values in the room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToggleRequest"
+            example:
+              revealed: true
+      responses:
+        "200":
+          description: Cards toggled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /rooms/{id}/reset:
+    post:
+      operationId: resetRound
+      tags:
+        - Rooms
+      summary: Reset round
+      description: Reset all votes and hide cards in the room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      responses:
+        "200":
+          description: Round reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /rooms/{id}/leave:
+    post:
+      operationId: leaveRoom
+      tags:
+        - Users
+      summary: Leave room
+      description: Remove a user from the room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveRequest"
+            example:
+              userId: "user-uuid-here"
+      responses:
+        "200":
+          description: User left successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /rooms/{id}/updates:
+    get:
+      operationId: getRoomUpdates
+      tags:
+        - Events
+      summary: Get room updates via SSE
+      description: Server-Sent Events stream that provides real-time updates for the room. Each event contains the current room state and list of users.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+          explode: true
+      responses:
+        "200":
+          description: Event Stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/RoomUpdate"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    Room:
+      type: object
+      description: A planning poker room
+      required:
+        - id
+        - name
+        - deck
+        - cardsRevealed
+        - calculateStats
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique room identifier
+        name:
+          type: string
+          description: Room name
+        deck:
+          type: array
+          items:
+            type: string
+          description: Card values available for voting
+        cardsRevealed:
+          type: boolean
+          description: Whether card values are revealed
+        calculateStats:
+          type: boolean
+          description: Whether average and median should be calculated and displayed
+      example:
+        id: "room-uuid"
+        name: "Sprint Planning"
+        deck:
+          - "0"
+          - "1"
+          - "2"
+          - "3"
+          - "5"
+          - "8"
+          - "fib"
+          - "l"
+        cardsRevealed: false
+        calculateStats: true
+
+    User:
+      type: object
+      description: A user in a room
+      required:
+        - id
+        - name
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+        name:
+          type: string
+          description: User display name
+        role:
+          type: string
+          enum:
+            - player
+            - viewer
+          description: User role (can vote or view only)
+        vote:
+          type: string
+          nullable: true
+          description: Current vote (null if not voted yet)
+      example:
+        id: "user-uuid"
+        name: "John Doe"
+        role: player
+        vote: "5"
+
+    RoomUpdate:
+      type: object
+      description: SSE event payload with current room state and users
+      required:
+        - room
+        - users
+      properties:
+        room:
+          $ref: "#/components/schemas/Room"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+          description: All users currently in the room
+
+    RoomExistsResponse:
+      type: object
+      required:
+        - exists
+      properties:
+        exists:
+          type: boolean
+          description: Whether the room exists
+      example:
+        exists: true
+
+    CreateRoomResponse:
+      type: object
+      required:
+        - roomId
+      properties:
+        roomId:
+          type: string
+          format: uuid
+          description: ID of the newly created room
+      example:
+        roomId: "abc-123-def-456"
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: Whether the operation succeeded
+      example:
+        success: true
+
+    CreateRoomRequest:
+      type: object
+      description: Request body for creating a new room
+      required:
+        - name
+        - deck
+        - calculateStats
+      properties:
+        name:
+          type: string
+          description: Room name
+        deck:
+          type: array
+          items:
+            type: string
+          description: Card values for the deck
+        calculateStats:
+          type: boolean
+          description: Whether average and median should be calculated and displayed
+      example:
+        name: "Sprint Planning #1"
+        calculateStats: true
+        deck:
+          - "0"
+          - "1"
+          - "2"
+          - "3"
+          - "5"
+          - "8"
+          - "13"
+          - "21"
+          - "34"
+          - "55"
+          - "fib"
+          - "l"
+          - "m"
+          - "h"
+
+    VoteRequest:
+      type: object
+      description: Request body for casting a vote
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          description: User identifier casting the vote
+        vote:
+          type: string
+          nullable: true
+          description: Card value selected (null to clear vote)
+      example:
+        userId: "user-uuid"
+        vote: "5"
+
+    ToggleRequest:
+      type: object
+      description: Request body for toggling card visibility
+      required:
+        - revealed
+      properties:
+        revealed:
+          type: boolean
+          description: true to show cards, false to hide
+      example:
+        revealed: true
+
+    LeaveRequest:
+      type: object
+      description: Request body for leaving a room
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          description: User identifier leaving the room
+      example:
+        userId: "user-uuid"
+
+    Error:
+      type: object
+      description: Standard error response
+      properties:
+        error:
+          type: string
+          description: Error message
+        message:
+          type: string
+          description: Detailed error message
+      example:
+        error: "Bad Request"
+        message: "Invalid room ID"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,65 +1,53 @@
 package network.fuhrmann.planning_poker.api
 
-import network.fuhrmann.planning_poker.service.Room
-import network.fuhrmann.planning_poker.service.User
+import network.fuhrmann.planning_poker.generated.api.RoomsApi
+import network.fuhrmann.planning_poker.generated.api.UsersApi
+import network.fuhrmann.planning_poker.generated.model.*
 import network.fuhrmann.planning_poker.service.RoomService
-import network.fuhrmann.planning_poker.service.RoomUpdate
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
-import reactor.core.publisher.Mono
-import kotlin.uuid.*
+import java.util.UUID
 
-@ExperimentalUuidApi
 @RestController
-@RequestMapping("/api/rooms")
+@RequestMapping("/api")
 @CrossOrigin // Erlaubt Anfragen vom Angular-Dev-Server (Port 4200)
-class PokerController(private val roomService: RoomService) {
-    data class CreateRoomRequest(val name: String, val deck: List<String>)
-    data class VoteRequest(val userId: String, val vote: String?)
-    data class ToggleRequest(val revealed: Boolean)
-    data class LeaveRequest(val userId: String)
+class PokerController(private val roomService: RoomService) : RoomsApi, UsersApi {
 
-    @GetMapping("/{id}/exists")
-    fun checkRoomExists(@PathVariable id: String): Mono<Boolean> {
-        return Mono.just(roomService.roomExists(id))
+    override suspend fun checkRoomExists(id: UUID): ResponseEntity<RoomExistsResponse> {
+        return ResponseEntity.ok(RoomExistsResponse(exists = roomService.roomExists(id.toString())))
     }
 
-    @PostMapping
-    fun createRoom(@RequestBody req: CreateRoomRequest): Mono<String> {
-        val roomId = Uuid.random()
-        roomService.createRoom(roomId.toString(), req.name, req.deck)
-        return Mono.just(roomId.toString())
+    override suspend fun createRoom(createRoomRequest: CreateRoomRequest): ResponseEntity<CreateRoomResponse> {
+        val roomId = UUID.randomUUID()
+        roomService.createRoom(roomId.toString(), createRoomRequest.name, createRoomRequest.deck, createRoomRequest.calculateStats)
+        return ResponseEntity.ok(CreateRoomResponse(roomId = roomId))
     }
 
-    @PostMapping("/{id}/join")
-    fun joinRoom(@PathVariable id: String, @RequestBody user: User): Mono<Void> {
-        roomService.joinRoom(id, user)
-        return Mono.empty()
+    override suspend fun joinRoom(id: UUID, user: User): ResponseEntity<SuccessResponse> {
+        roomService.joinRoom(id.toString(), user)
+        return ResponseEntity.ok(SuccessResponse(success = true))
     }
 
-    @PostMapping("/{id}/vote")
-    fun castVote(@PathVariable id: String, @RequestBody req: VoteRequest): Mono<Void> {
-        roomService.castVote(id, req.userId, req.vote)
-        return Mono.empty()
+    override suspend fun castVote(id: UUID, voteRequest: VoteRequest): ResponseEntity<SuccessResponse> {
+        roomService.castVote(id.toString(), voteRequest.userId, voteRequest.vote)
+        return ResponseEntity.ok(SuccessResponse(success = true))
     }
 
-    @PostMapping("/{id}/toggle")
-    fun toggleCards(@PathVariable id: String, @RequestBody req: ToggleRequest): Mono<Void> {
-        roomService.toggleCards(id, req.revealed)
-        return Mono.empty()
+    override suspend fun toggleCards(id: UUID, toggleRequest: ToggleRequest): ResponseEntity<SuccessResponse> {
+        roomService.toggleCards(id.toString(), toggleRequest.revealed)
+        return ResponseEntity.ok(SuccessResponse(success = true))
     }
 
-    @PostMapping("/{id}/reset")
-    fun resetRound(@PathVariable id: String): Mono<Void> {
-        roomService.resetRound(id)
-        return Mono.empty()
+    override suspend fun resetRound(id: UUID): ResponseEntity<SuccessResponse> {
+        roomService.resetRound(id.toString())
+        return ResponseEntity.ok(SuccessResponse(success = true))
     }
 
-    @PostMapping("/{id}/leave")
-    fun leaveRoom(@PathVariable id: String, @RequestBody req: LeaveRequest): Mono<Void> {
-        roomService.leaveRoom(id, req.userId)
-        return Mono.empty()
+    override suspend fun leaveRoom(id: UUID, leaveRequest: LeaveRequest): ResponseEntity<SuccessResponse> {
+        roomService.leaveRoom(id.toString(), leaveRequest.userId)
+        return ResponseEntity.ok(SuccessResponse(success = true))
     }
 
     /**
@@ -67,7 +55,7 @@ class PokerController(private val roomService: RoomService) {
      * Jedes Mal, wenn im Service 'broadcast()' aufgerufen wird, schickt dieser
      * Stream ein neues JSON-Objekt an alle Clients in diesem Raum.
      */
-    @GetMapping("/{id}/updates", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
+    @GetMapping("/rooms/{id}/updates", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun getRoomUpdates(@PathVariable id: String): Flux<RoomUpdate> {
         return roomService.getEventStream(id)
     }
