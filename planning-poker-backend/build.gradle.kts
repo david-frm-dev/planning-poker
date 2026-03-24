@@ -93,9 +93,20 @@ tasks.withType<Test> {
 }
 
 val buildFrontend by tasks.registering(Exec::class) {
-    group = "build"
-    workingDir = file("../planning-poker")
-    commandLine(if (org.apache.tools.ant.taskdefs.condition.Os.isFamily(org.apache.tools.ant.taskdefs.condition.Os.FAMILY_WINDOWS)) "npm.cmd" else "npm", "run", "build")
+	group = "build"
+	workingDir = file("../planning-poker")
+
+	val isWindows = org.apache.tools.ant.taskdefs.condition.Os
+		.isFamily(org.apache.tools.ant.taskdefs.condition.Os.FAMILY_WINDOWS)
+
+	val npmExecutable = if (isWindows) {
+		"npm.cmd"
+	} else {
+		findProperty("npmPath") as String?
+			?: error("npmPath ist nicht in gradle.properties gesetzt!")
+	}
+
+	commandLine(npmExecutable, "run", "build")
 }
 
 val copyFrontend by tasks.registering(Copy::class) {
