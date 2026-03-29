@@ -1,5 +1,8 @@
 package network.fuhrmann.planning_poker.api
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import network.fuhrmann.planning_poker.generated.api.IssuesApi
 import network.fuhrmann.planning_poker.generated.api.RoomsApi
 import network.fuhrmann.planning_poker.generated.api.UsersApi
 import network.fuhrmann.planning_poker.generated.model.*
@@ -8,12 +11,12 @@ import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Flux
-import java.util.UUID
+import java.util.*
 
 @RestController
 @RequestMapping("/api")
 @CrossOrigin // Erlaubt Anfragen vom Angular-Dev-Server (Port 4200)
-class PokerController(private val roomService: RoomService) : RoomsApi, UsersApi {
+class PokerController(private val roomService: RoomService) : RoomsApi, UsersApi, IssuesApi {
 
     override suspend fun checkRoomExists(id: UUID): ResponseEntity<RoomExistsResponse> {
         return ResponseEntity.ok(RoomExistsResponse(exists = roomService.roomExists(id.toString())))
@@ -58,5 +61,35 @@ class PokerController(private val roomService: RoomService) : RoomsApi, UsersApi
     @GetMapping("/rooms/{id}/updates", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun getRoomUpdates(@PathVariable id: String): Flux<RoomUpdate> {
         return roomService.getEventStream(id)
+    }
+
+    override suspend fun addIssue(
+        id: UUID,
+        addIssueRequest: AddIssueRequest
+    ): ResponseEntity<SuccessResponse> {
+        roomService.addIssue(id.toString(), addIssueRequest.title, addIssueRequest.link)
+        return ResponseEntity.ok(SuccessResponse(success = true))
+    }
+
+    override suspend fun finishIssueVoting(
+        id: UUID,
+        issueId: UUID,
+        finishIssueRequest: FinishIssueRequest
+    ): ResponseEntity<SuccessResponse> {
+        roomService.finishIssueVoting(id.toString(), issueId.toString(), finishIssueRequest)
+        return ResponseEntity.ok(SuccessResponse(success = true))
+    }
+
+    override fun getIssues(id: UUID): ResponseEntity<Flow<Issue>> {
+        val issues = roomService.getIssues(id.toString())
+        return ResponseEntity.ok(issues.asFlow())
+    }
+
+    override suspend fun startIssueVoting(
+        id: UUID,
+        issueId: UUID
+    ): ResponseEntity<SuccessResponse> {
+        roomService.startIssueVoting(id.toString(), issueId.toString())
+        return ResponseEntity.ok(SuccessResponse(success = true))
     }
 }

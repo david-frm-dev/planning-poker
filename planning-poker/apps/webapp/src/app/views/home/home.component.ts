@@ -1,16 +1,15 @@
-import { Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { PokerService } from "../utils/poker.service";
-import { ZardCardComponent } from "../shared/components/card";
-import { ZardInputDirective } from "../shared/components/input";
-import { ZardSelectComponent, ZardSelectItemComponent } from "../shared/components/select";
-import { ZardButtonComponent } from "../shared/components/button";
-import { toast } from "ngx-sonner";
-import { ZardDarkMode } from "../shared/services";
-import { ZardIconComponent } from "../shared/components/icon";
-import { Directive, HostListener } from '@angular/core';
+import { Component, Directive, HostListener, inject }   from '@angular/core';
+import { CommonModule }                                 from '@angular/common';
+import { FormsModule }                                  from '@angular/forms';
+import { Router }                                       from '@angular/router';
+import { PokerService }                                 from "../../utils/poker.service";
+import { ZardCardComponent }                            from "../../shared/components/card";
+import { ZardInputDirective }                           from "../../shared/components/input";
+import { ZardSelectComponent, ZardSelectItemComponent } from "../../shared/components/select";
+import { ZardButtonComponent }                          from "../../shared/components/button";
+import { toast }                                        from "ngx-sonner";
+import { ZardDarkMode }                                 from "../../shared/services";
+import { ZardIconComponent }                            from "../../shared/components/icon";
 
 @Directive({
   selector: '[appNumberOnly]'

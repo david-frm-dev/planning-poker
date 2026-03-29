@@ -1,5 +1,5 @@
-import { Component } from "@angular/core";
-import { LayoutImports } from "../shared/components/layout";
+import { Component }     from "@angular/core";
+import { LayoutImports } from "../../shared/components/layout";
 
 @Component({
   selector: 'app-playground',

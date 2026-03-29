@@ -20,6 +20,8 @@ tags:
     description: User-related operations
   - name: Events
     description: Server-Sent Events stream
+  - name: Issues
+    description: Issue management for rooms
 
 paths:
   /rooms/{id}/exists:
@@ -329,6 +331,166 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /rooms/{id}/issues:
+    get:
+      operationId: getIssues
+      tags:
+        - Issues
+      summary: Get all issues for a room
+      description: Returns the list of all issues in the room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+      responses:
+        "200":
+          description: List of issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Issue"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: addIssue
+      tags:
+        - Issues
+      summary: Add issue to room
+      description: Adds a new issue to the room's issue list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddIssueRequest"
+      responses:
+        "200":
+          description: Issue added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /rooms/{id}/issues/{issueId}/start:
+    post:
+      operationId: startIssueVoting
+      tags:
+        - Issues
+      summary: Start voting round for an issue
+      description: Sets the issue status to voting and resets all current votes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+        - name: issueId
+          in: path
+          required: true
+          description: Issue ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+      responses:
+        "200":
+          description: Voting started successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room or issue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /rooms/{id}/issues/{issueId}/finish:
+    post:
+      operationId: finishIssueVoting
+      tags:
+        - Issues
+      summary: Finish voting round for an issue
+      description: Sets the issue status to done and saves the final result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+        - name: issueId
+          in: path
+          required: true
+          description: Issue ID
+          schema:
+            type: string
+            format: uuid
+          style: simple
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinishIssueRequest"
+      responses:
+        "200":
+          description: Issue voting finished successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Room or issue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   schemas:
     Room:
@@ -411,6 +573,7 @@ components:
       required:
         - room
         - users
+        - issues
       properties:
         room:
           $ref: "#/components/schemas/Room"
@@ -419,6 +582,11 @@ components:
           items:
             $ref: "#/components/schemas/User"
           description: All users currently in the room
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/Issue"
+          description: All issues in the room
 
     RoomExistsResponse:
       type: object
@@ -546,6 +714,68 @@ components:
       example:
         error: "Bad Request"
         message: "Invalid room ID"
+
+    Issue:
+      type: object
+      description: An issue to be estimated in planning poker
+      required:
+        - id
+        - title
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique issue identifier
+        title:
+          type: string
+          description: Issue title
+        link:
+          type: string
+          nullable: true
+          description: Optional issue/ticket link
+        status:
+          type: string
+          enum:
+            - pending
+            - voting
+            - done
+          description: Current status of the issue
+        average:
+          type: string
+          nullable: true
+          description: Average after voting
+        agreedAverage:
+          type: string
+          nullable: true
+          description: Manuale agreed Average after voting
+
+    AddIssueRequest:
+      type: object
+      description: Request body for adding a new issue
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          description: Issue title
+        link:
+          type: string
+          nullable: true
+          description: Optional issue link
+
+    FinishIssueRequest:
+      type: object
+      description: Request body for finishing an issue voting round
+      properties:
+        average:
+          type: string
+          nullable: true
+          description: Average after voting
+        agreedAverage:
+          type: string
+          nullable: true
+          description: Manuale agreed Average after voting
 
   securitySchemes:
     bearerAuth:

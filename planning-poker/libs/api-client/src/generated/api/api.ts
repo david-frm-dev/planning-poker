@@ -1,7 +1,10 @@
 export * from './eventsService';
 import { EventsService } from './eventsService';
-export * from './roomsService';
+import { IssuesService } from './issuesService';
 import { RoomsService } from './roomsService';
-export * from './usersService';
 import { UsersService } from './usersService';
-export const APIS = [EventsService, RoomsService, UsersService];
+
+export * from './issuesService';
+export * from './roomsService';
+export * from './usersService';
+export const APIS = [EventsService, IssuesService, RoomsService, UsersService];

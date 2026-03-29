@@ -62,9 +62,11 @@
     </div>
   </div>
 
+  <issue-sidebar class="z-1000" [roomId]="roomId" (selectedIssue)="selectedIssue.set($event)"/>
+
   <div class="flex justify-end items-end w-full p-4">
     <button z-button zType="outline" (click)="issueCompVC()?.showSidebar()">
-      <z-icon zType="panel-left" />
+      <z-icon zType="panel-left"/>
     </button>
   </div>
 
@@ -118,14 +120,18 @@
       </div>
     </div>
 
-    <issue-sidebar/>
-
-    <!--New Round Button-->
-    <button z-button zType="secondary" (click)="revealCards(room.id, !room.cardsRevealed)"
-            class="font-bold py-5 px-3 mb-12 rounded-xl border-3">
-      <z-icon [zType]="room.cardsRevealed ? 'loader-circle' : 'eye'"/>
-      {{ room.cardsRevealed ? 'Neue Runde' : 'Karten aufdecken' }}
-    </button>
+    <!--New Round Button and IssueHeadline-->
+    <div class="flex flex-col items-center gap-2">
+      @let issue = selectedIssue();
+      @if (issue) {
+        <p>Aktuelle Runde:{{ issue.title }}</p>
+      }
+      <button z-button zType="secondary" (click)="revealCards(room.id, !room.cardsRevealed)"
+              class="font-bold py-5 px-3 mb-12 rounded-xl border-3">
+        <z-icon [zType]="room.cardsRevealed ? 'loader-circle' : 'eye'"/>
+        {{ room.cardsRevealed ? 'Neue Runde' : 'Karten aufdecken' }}
+      </button>
+    </div>
   </div>
 
   <!--Footer-->

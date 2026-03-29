@@ -1,17 +1,18 @@
-import { Component, inject, OnDestroy, OnInit, viewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
-import { retry, Subscription, timer } from 'rxjs';
-import { PokerService, Room, User } from "../utils/poker.service";
-import { ZardCardComponent } from "../shared/components/card";
-import { ZardInputDirective } from "../shared/components/input";
-import { ZardSelectComponent, ZardSelectItemComponent } from "../shared/components/select";
-import { ZardButtonComponent } from "../shared/components/button";
-import { ZardDarkMode } from "../shared/services";
-import { ZardIconComponent } from "../shared/components/icon";
-import { toast } from "ngx-sonner";
-import { IssueSidebarComponent } from "./issue-sidebar/issue-sidebar.component";
+import { Component, inject, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
+import { CommonModule }                                            from '@angular/common';
+import { FormsModule }                                             from '@angular/forms';
+import { ActivatedRoute, Router }                                  from '@angular/router';
+import { retry, Subscription, timer }                              from 'rxjs';
+import { PokerService, Room, User }                                from "../../utils/poker.service";
+import { ZardCardComponent }                                       from "../../shared/components/card";
+import { ZardInputDirective }                                      from "../../shared/components/input";
+import { ZardSelectComponent, ZardSelectItemComponent }            from "../../shared/components/select";
+import { ZardButtonComponent }                                     from "../../shared/components/button";
+import { ZardDarkMode }                                            from "../../shared/services";
+import { ZardIconComponent }                                       from "../../shared/components/icon";
+import { toast }                                                   from "ngx-sonner";
+import { IssueSidebarComponent }                                   from "../issue-sidebar/issue-sidebar.component";
+import { Issue }                                                   from "@planning-poker/api-client";
 
 const SSE_MAX_RETRIES = 5;
 
@@ -21,8 +22,20 @@ const SSE_MAX_RETRIES = 5;
   imports: [CommonModule, FormsModule, ZardCardComponent, ZardInputDirective, ZardSelectComponent, ZardSelectItemComponent, ZardButtonComponent, ZardIconComponent, IssueSidebarComponent],
   templateUrl: './poker-room.component.html',
   styles: [`
-    .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
   `]
 })
 export class PokerRoomComponent implements OnInit, OnDestroy {
@@ -41,6 +54,8 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
   setupRole: 'player' | 'viewer' = 'player';
 
   private connectionSub?: Subscription;
+
+  readonly selectedIssue = signal<Issue | null>(null);
 
   readonly issueCompVC = viewChild(IssueSidebarComponent);
 
@@ -112,7 +127,7 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
         // Keep currentUser.vote in sync with server truth (survives reload/rejoin)
         const serverUser = update.users.find(u => u.id === this.currentUser?.id);
         if (serverUser && this.currentUser) {
-          this.currentUser = { ...this.currentUser, vote: serverUser.vote };
+          this.currentUser = {...this.currentUser, vote: serverUser.vote};
         }
         this.calculateStats();
       },
@@ -182,7 +197,12 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
   async revealCards(roomId: string, reveal: boolean) {
     try {
       if (!reveal) {
+        const _selectedIssue = this.selectedIssue();
+
+        if (_selectedIssue?.id != null) this.issueCompVC()?.finish(_selectedIssue.id, this.stats?.average, this.stats?.average)
+
         await this.pokerService.resetRound(roomId);
+
         if (this.currentUser) this.currentUser.vote = undefined;
       } else {
         await this.pokerService.toggleCards(roomId, reveal);
@@ -201,7 +221,8 @@ export class PokerRoomComponent implements OnInit, OnDestroy {
 
   logout() {
     if (this.currentUser) {
-      this.pokerService.leaveRoom(this.roomId, this.currentUser.id).catch(() => {});
+      this.pokerService.leaveRoom(this.roomId, this.currentUser.id).catch(() => {
+      });
     }
     this.pokerService.clearSession();
     this.currentUser = null;

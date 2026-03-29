@@ -1,16 +1,8 @@
-import { Injectable, inject, NgZone } from '@angular/core';
-import { firstValueFrom, Observable } from 'rxjs';
-import { RoomsService, UsersService, User, Room, RoomUpdate } from '@planning-poker/api-client';
+import { inject, Injectable, NgZone }                         from '@angular/core';
+import { firstValueFrom, Observable }                         from 'rxjs';
+import { Room, RoomsService, RoomUpdate, User, UsersService } from '@planning-poker/api-client';
 
 export type { Room, User, RoomUpdate };
-
-// Konstante für die verfügbaren Kartendecks
-export const POKER_DECKS = {
-  standard: ['1', '2', '3', '5', '8', '13', '21', '☕', '?'],
-  modified: ['0', '½', '1', '2', '3', '5', '8', '13', '20', '40', '100', '☕', '?'],
-};
-
-export type DeckType = keyof typeof POKER_DECKS;
 
 @Injectable({ providedIn: 'root' })
 export class PokerService {
